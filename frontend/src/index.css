@@ -1,0 +1,670 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* =========================================================
+   GOVERNMENT SMART CITY — PROFESSIONAL LIGHT THEME
+========================================================= */
+
+:root {
+  font-family:
+    "Inter",
+    "Segoe UI",
+    Roboto,
+    Arial,
+    sans-serif;
+
+  color: #1f2937;
+  background: #f4f6f8;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  background: #f4f6f8;
+  color: #1f2937;
+}
+
+/* =========================================================
+   GLOBAL
+========================================================= */
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: #dbeafe;
+  color: #123b6d;
+}
+
+/* =========================================================
+   APPLICATION
+========================================================= */
+
+.bg-app {
+  background: #f4f6f8 !important;
+  color: #1f2937 !important;
+}
+
+/* =========================================================
+   SIDEBAR
+========================================================= */
+
+.smart-sidebar {
+  background: #ffffff !important;
+
+  border-right: 1px solid #d9e0e7 !important;
+
+  box-shadow: none !important;
+
+  color: #45576d !important;
+}
+
+/* Sidebar headings */
+
+.smart-sidebar h1,
+.smart-sidebar h2,
+.smart-sidebar h3 {
+  color: #173b6c !important;
+}
+
+/* Sidebar text */
+
+.smart-sidebar .text-slate-400,
+.smart-sidebar .text-slate-500 {
+  color: #66788c !important;
+}
+
+/* Navigation */
+
+.smart-nav {
+  color: #52677f !important;
+
+  background: transparent !important;
+
+  border-radius: 7px !important;
+}
+
+.smart-nav:hover {
+  background: #eef4fa !important;
+
+  color: #145ca8 !important;
+}
+
+.smart-nav-active {
+  background: #1769c2 !important;
+
+  color: #ffffff !important;
+
+  border-radius: 7px !important;
+
+  box-shadow: none !important;
+}
+
+.smart-nav-active svg {
+  color: #ffffff !important;
+}
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+.smart-header {
+  background: #ffffff !important;
+
+  border-bottom: 1px solid #d9e0e7 !important;
+
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+
+  backdrop-filter: none !important;
+}
+
+/* =========================================================
+   SEARCH
+========================================================= */
+
+.smart-search {
+  background: #f8fafc !important;
+
+  border: 1px solid #d4dde7 !important;
+
+  color: #263c57 !important;
+
+  border-radius: 7px !important;
+
+  box-shadow: none !important;
+}
+
+.smart-search::placeholder {
+  color: #8999aa !important;
+}
+
+.smart-search:hover {
+  background: #ffffff !important;
+
+  border-color: #bdcbd9 !important;
+}
+
+.smart-search:focus {
+  outline: none !important;
+
+  background: #ffffff !important;
+
+  border-color: #2774c5 !important;
+
+  box-shadow:
+    0 0 0 2px rgba(39, 116, 197, 0.08) !important;
+}
+
+/* =========================================================
+   MAIN HEADINGS
+========================================================= */
+
+.smart-title {
+  color: #173b6c !important;
+
+  font-weight: 700 !important;
+
+  letter-spacing: -0.4px;
+}
+
+.smart-subtitle {
+  color: #687b90 !important;
+}
+
+/* =========================================================
+   PRIMARY BLUE
+========================================================= */
+
+.smart-primary {
+  color: #1769c2 !important;
+}
+
+/* =========================================================
+   STATUS — ONLINE
+========================================================= */
+
+.smart-online {
+  color: #176b55 !important;
+
+  background: #edf8f4 !important;
+
+  border: 1px solid #cbe9dd !important;
+
+  box-shadow: none !important;
+}
+
+.smart-online-dot {
+  background: #159570 !important;
+
+  box-shadow: none !important;
+}
+
+/* =========================================================
+   CARDS
+========================================================= */
+
+.smart-card {
+  background: #ffffff !important;
+
+  border: 1px solid #dce3ea !important;
+
+  border-radius: 10px !important;
+
+  box-shadow:
+    0 2px 7px rgba(15, 23, 42, 0.035) !important;
+}
+
+.smart-card:hover {
+  border-color: #d1dce7 !important;
+
+  box-shadow:
+    0 4px 12px rgba(15, 23, 42, 0.05) !important;
+}
+
+/* =========================================================
+   KPI ICON
+========================================================= */
+
+.smart-icon {
+  background: #eaf3fc !important;
+
+  color: #1769c2 !important;
+
+  border-radius: 8px !important;
+}
+
+/* =========================================================
+   KPI VALUES
+========================================================= */
+
+.smart-value {
+  color: #173b6c !important;
+
+  font-weight: 750 !important;
+}
+
+.smart-label {
+  color: #687b90 !important;
+}
+
+.smart-trend {
+  color: #16815f !important;
+
+  font-weight: 600 !important;
+}
+
+/* =========================================================
+   DIVIDERS
+========================================================= */
+
+.smart-divider {
+  border-color: #e1e7ed !important;
+}
+
+/* =========================================================
+   HEALTH
+========================================================= */
+
+.health-green {
+  color: #16815f !important;
+}
+
+/* =========================================================
+   PROGRESS BARS
+========================================================= */
+
+.smart-progress-bg {
+  background: #e8edf2 !important;
+}
+
+.smart-progress {
+  background: #2774c5 !important;
+
+  border-radius: 999px !important;
+}
+
+.smart-progress-green {
+  background: #159b73 !important;
+
+  border-radius: 999px !important;
+}
+
+/* =========================================================
+   WARNING
+========================================================= */
+
+.smart-warning {
+  color: #9a650b !important;
+
+  background: #fff8e8 !important;
+
+  border-color: #f0dcae !important;
+}
+
+/* =========================================================
+   CRITICAL
+========================================================= */
+
+.smart-critical {
+  color: #c33d3d !important;
+
+  background: #fff1f1 !important;
+
+  border-color: #efcccc !important;
+}
+
+/* =========================================================
+   TABLES
+========================================================= */
+
+.smart-table {
+  background: #ffffff !important;
+
+  border: 1px solid #dce3ea !important;
+
+  border-radius: 8px !important;
+
+  overflow: hidden;
+}
+
+.smart-table th {
+  background: #f5f7fa !important;
+
+  color: #53677d !important;
+
+  border-bottom: 1px solid #dce3ea !important;
+
+  font-weight: 600 !important;
+}
+
+.smart-table td {
+  color: #344b64 !important;
+
+  border-bottom: 1px solid #edf1f4 !important;
+}
+
+.smart-table tr:hover td {
+  background: #f8fafc !important;
+}
+
+/* =========================================================
+   MAP
+========================================================= */
+
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+
+  background: #e8eef4;
+
+  font-family: "Inter", "Segoe UI", sans-serif;
+}
+
+.smart-map {
+  border-radius: 9px !important;
+
+  overflow: hidden !important;
+
+  border: 1px solid #dce3ea !important;
+}
+
+/* Leaflet zoom controls */
+
+.leaflet-control-zoom {
+  border: 0 !important;
+
+  box-shadow:
+    0 2px 7px rgba(15, 23, 42, 0.12) !important;
+}
+
+.leaflet-control-zoom a {
+  background: #ffffff !important;
+
+  color: #40566f !important;
+
+  border-color: #dfe5eb !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: #f5f8fb !important;
+
+  color: #1769c2 !important;
+}
+
+.leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.85) !important;
+
+  color: #7b8a9b !important;
+
+  font-size: 8px !important;
+}
+
+/* =========================================================
+   MAP LEGEND
+========================================================= */
+
+.map-legend {
+  background: rgba(255, 255, 255, 0.97) !important;
+
+  border: 1px solid #dce3ea !important;
+
+  color: #53677d !important;
+
+  box-shadow:
+    0 2px 8px rgba(15, 23, 42, 0.08) !important;
+
+  border-radius: 6px !important;
+}
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+.smart-button {
+  background: #ffffff !important;
+
+  border: 1px solid #d2dce6 !important;
+
+  color: #425a73 !important;
+
+  border-radius: 7px !important;
+}
+
+.smart-button:hover {
+  background: #f5f8fb !important;
+
+  border-color: #b8c8d8 !important;
+
+  color: #1769c2 !important;
+}
+
+.smart-button-primary {
+  background: #1769c2 !important;
+
+  color: #ffffff !important;
+
+  border: 1px solid #1769c2 !important;
+
+  border-radius: 7px !important;
+
+  box-shadow: none !important;
+}
+
+.smart-button-primary:hover {
+  background: #125ba9 !important;
+}
+
+/* =========================================================
+   BADGES
+========================================================= */
+
+.badge-normal {
+  color: #176d56 !important;
+
+  background: #edf8f4 !important;
+
+  border: 1px solid #cbe9dd !important;
+}
+
+.badge-warning {
+  color: #95620c !important;
+
+  background: #fff7e5 !important;
+
+  border: 1px solid #efdcad !important;
+}
+
+.badge-critical {
+  color: #c23d3d !important;
+
+  background: #fff0f0 !important;
+
+  border: 1px solid #efcccc !important;
+}
+
+/* =========================================================
+   GOVERNMENT STYLE BANNER
+========================================================= */
+
+.smart-city-banner {
+  background: #eef8f5 !important;
+
+  border: 1px solid #d1ebe2 !important;
+
+  color: #286d5b !important;
+
+  border-radius: 7px !important;
+}
+
+/* =========================================================
+   SCROLLBAR
+========================================================= */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f3f5f7;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c4ced8;
+
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aebbc8;
+}
+
+/* =========================================================
+   REMOVE NEON / GLOW EFFECTS
+========================================================= */
+
+.shadow-cyan-400,
+.shadow-blue-400,
+.shadow-emerald-400 {
+  box-shadow: none !important;
+}
+
+[class*="shadow-cyan"],
+[class*="shadow-blue"],
+[class*="shadow-emerald"] {
+  box-shadow: none !important;
+}
+
+/* =========================================================
+   OVERRIDE COMMON DARK TAILWIND CLASSES
+   This is the important part for your current screenshot.
+========================================================= */
+
+.bg-\[\#07111f\] {
+  background: #f4f6f8 !important;
+}
+
+.bg-\[\#091522\] {
+  background: #ffffff !important;
+}
+
+.bg-white\/5 {
+  background: #f8fafc !important;
+}
+
+.bg-white\/\[\.03\] {
+  background: #f8fafc !important;
+}
+
+.bg-white\/\[\.04\] {
+  background: #ffffff !important;
+}
+
+.bg-white\/\[\.06\] {
+  background: #f8fafc !important;
+}
+
+.border-white\/10 {
+  border-color: #dce3ea !important;
+}
+
+.border-white\/5 {
+  border-color: #e5eaf0 !important;
+}
+
+.text-slate-100 {
+  color: #173b6c !important;
+}
+
+.text-slate-200 {
+  color: #28496c !important;
+}
+
+.text-slate-300 {
+  color: #4f6680 !important;
+}
+
+.text-slate-400 {
+  color: #65798f !important;
+}
+
+.text-slate-500 {
+  color: #7b8c9f !important;
+}
+
+.text-slate-600 {
+  color: #8a99a9 !important;
+}
+
+.text-cyan-300 {
+  color: #1769c2 !important;
+}
+
+.text-cyan-400 {
+  color: #1769c2 !important;
+}
+
+.text-emerald-300 {
+  color: #16815f !important;
+}
+
+.text-emerald-400 {
+  color: #16815f !important;
+}
+
+.text-blue-300 {
+  color: #1769c2 !important;
+}
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 1100px) {
+  .smart-sidebar {
+    width: 190px;
+  }
+}
+
+@media (max-width: 768px) {
+  .smart-sidebar {
+    width: 70px;
+  }
+
+  .smart-sidebar .brand-text,
+  .smart-sidebar .nav-text,
+  .smart-sidebar .side-label {
+    display: none;
+  }
+}
+
+@media (max-width: 500px) {
+  .smart-sidebar {
+    width: 60px;
+  }
+
+  .smart-card {
+    border-radius: 8px !important;
+  }
+}
