@@ -94,12 +94,15 @@ automatic trust decision or create an issue by itself. Configure
 alert after consecutive valid readings from the same device. This is a
 prototype monitoring threshold, not an official health or safety limit.
 
-The current ESP32 sketch sends `impact_detected`, `impact_peak_g`, and the
-backend `motion_features` summary. The backend classifies the motion pattern
-and stores its `event_classification` and `pothole_confidence` separately from
-the trust-engine confidence and decision. Impact flags, manual button signals,
-and high motion-classifier confidence do not by themselves bypass trust
-requirements or create an accepted issue.
+The current ESP32 sketch performs a stationary startup calibration using 150
+MPU6050 samples and reports `calibrated: true` only after its movement and
+sample-variation checks pass. A failed calibration blocks motion sampling and
+reading submission until a successful retry. The firmware sends
+`impact_detected`, `impact_peak_g`, and a `motion_features` summary. The
+backend stores the motion classification and `pothole_confidence` separately
+from the trust-engine confidence and decision. Impact flags, manual button
+signals, and high motion-classifier confidence do not by themselves bypass
+trust requirements or create an accepted issue.
 
 ## Motion-analysis pipeline and simulation
 
@@ -127,10 +130,10 @@ illustrative software fixtures—not measured vehicle data, validation, or
 production thresholds. Record labeled real-world samples and tune/test this
 model before using it operationally.
 
-The firmware currently sets `calibrated: false`. Under the current trust
-engine this results in `REQUEST_DATA`, even when the motion classifier labels
-the pattern `POTENTIAL_POTHOLE`. Do not change the flag until a real calibration
-procedure has been completed and the firmware accurately represents it.
+The firmware's stationary calibration is a prototype bias estimate, assumes
+level Z-up mounting, and has not been validated against labeled road data. The
+backend still independently evaluates calibration, sensor status, GPS
+accuracy, freshness, motion class, conflicts, and device trust.
 
 ## API endpoints
 
@@ -141,8 +144,9 @@ procedure has been completed and the firmware accurately represents it.
 - `GET /api/manual-reports`: list actual manual pothole reports with their
   backend decision, reasons, coordinates, and validation status; requires
   dashboard authorization.
-- `GET /api/summary`, `/api/vehicles`, `/api/events`, `/api/alerts`,
-  `/api/issues`, `/api/maintenance`: dashboard data; require a bearer token.
+- `GET /api/issues`: list accepted/fused infrastructure issues.
+- `GET /api/summary`, `/api/vehicles`, `/api/events`, `/api/alerts`, and
+  `/api/maintenance`: dashboard data; require a bearer token.
 - `GET /api/audit`: audit records; requires dashboard authorization.
 - `GET /health`: process health check only; it does not guarantee database
   connectivity.
@@ -159,6 +163,12 @@ criteria requests more data instead of creating a confirmed issue; fault,
 stale, conflicting, and low-trust readings retain their backend rejection or
 defer decisions. The firmware keeps a manual report queued until it receives a
 valid GPS fix and a successful ingestion response.
+
+The manual-report endpoint maps the stored reading decision to a display state:
+`ACCEPT` to `CONFIRMED`, `REQUEST_DATA` to `PENDING`, `DEFER` to `DEFERRED`, and
+`REJECT` to `REJECTED`. Accepted readings create or update a nearby road issue
+within a 25-meter spatial fusion radius; non-accepted reports remain visible as
+manual candidates with their actual coordinates and reasons.
 
 Interactive OpenAPI documentation is available at `/docs` while the API is
 running.
