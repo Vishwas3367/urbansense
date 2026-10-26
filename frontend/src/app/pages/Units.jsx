@@ -82,7 +82,7 @@ export default function Units() {
 
       {selectedVehicle && (
         <div onClick={() => setSelectedVehicle(null)} className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-          <div onClick={(event) => event.stopPropagation()} className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0b1827] p-6">
+          <div onClick={(event) => event.stopPropagation()} className="units-details-modal w-full max-w-lg rounded-2xl border border-white/10 bg-[#0b1827] p-6">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xl font-bold">{selectedVehicle.id}</div>
@@ -103,6 +103,12 @@ export default function Units() {
                 ['Observations', selectedVehicle.observations],
                 ['Anomalies', selectedVehicle.anomalies],
                 ['Sensors', selectedVehicle.sensors],
+                [
+                  'Temperature',
+                  selectedVehicle.temperature_c == null
+                    ? 'Unavailable'
+                    : `${selectedVehicle.temperature_c.toFixed(1)} °C`,
+                ],
                 ['Trust', `${selectedVehicle.trust ?? 0}%`],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-xl border border-white/10 bg-white/[.025] p-4">

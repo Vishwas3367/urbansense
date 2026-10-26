@@ -8,6 +8,7 @@ import api from '../services/api';
 export default function Monitoring() {
   const [vehicles, setVehicles] = useState([]);
   const [issues, setIssues] = useState([]);
+  const [manualReports, setManualReports] = useState([]);
   const [events, setEvents] = useState([]);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [error, setError] = useState('');
@@ -16,15 +17,17 @@ export default function Monitoring() {
     let isMounted = true;
     const load = async () => {
       try {
-        const [nextVehicles, nextIssues, nextEvents] = await Promise.all([
+        const [nextVehicles, nextIssues, nextEvents, nextManualReports] = await Promise.all([
           api.getVehicles(),
           api.getIssues(),
           api.getEvents(),
+          api.getManualReports(),
         ]);
         if (!isMounted) return;
         setVehicles(nextVehicles);
         setIssues(nextIssues);
         setEvents(nextEvents);
+        setManualReports(nextManualReports);
         setSelectedVehicle((current) =>
           nextVehicles.find((vehicle) => vehicle.id === current?.id) ?? nextVehicles[0] ?? null
         );
@@ -57,7 +60,7 @@ export default function Monitoring() {
             <Badge tone={error ? 'red' : 'green'}>{error ? 'OFFLINE' : 'LIVE'}</Badge>
           </div>
           <div className="h-[520px]">
-            <MapView issues={issues} vehicles={vehicles} />
+            <MapView issues={issues} vehicles={vehicles} manualReports={manualReports} />
           </div>
         </Card>
 

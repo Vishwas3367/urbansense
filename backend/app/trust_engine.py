@@ -138,24 +138,36 @@ def score_event(
     else:
         reasons.extend(road_event["evidence"])
         if road_event["classification"] != "POTENTIAL_POTHOLE":
-            if road_event["classification"] in {
-                "BRAKING_LIKE",
-                "SHARP_TURN_LIKE",
-                "ROTATION_DOMINATED",
-                "SPEED_BREAKER_LIKE",
-                "ROUGH_ROAD_LIKE",
-                "INSUFFICIENT_SPEED",
-                "NORMAL_OR_UNCLASSIFIED",
-            } and decision == "ACCEPT":
-                decision = "REJECT"
-            elif decision == "ACCEPT":
-                decision = "REQUEST_DATA"
-            reasons.append(
-                "The motion pattern did not meet the prototype pothole-candidate criteria."
-            )
+            if road_event["classification"] == "INSUFFICIENT_SPEED":
+                if decision == "ACCEPT":
+                    decision = "REQUEST_DATA"
+                    reasons.append(
+                        "A higher-speed sample is required to evaluate a pothole candidate."
+                    )
+            else:
+                if road_event["classification"] in {
+                    "BRAKING_LIKE",
+                    "SHARP_TURN_LIKE",
+                    "ROTATION_DOMINATED",
+                    "SPEED_BREAKER_LIKE",
+                    "ROUGH_ROAD_LIKE",
+                    "NORMAL_OR_UNCLASSIFIED",
+                } and decision == "ACCEPT":
+                    decision = "REJECT"
+                elif decision == "ACCEPT":
+                    decision = "REQUEST_DATA"
+                reasons.append(
+                    "The motion pattern did not meet the prototype pothole-candidate criteria."
+                )
         elif road_event["confidence"] < 0.65 and decision == "ACCEPT":
             decision = "REQUEST_DATA"
             reasons.append("Pothole-candidate confidence is below the prototype evidence floor.")
+
+    if sample.get("manual_trigger") and decision == "REJECT" and sample["sensor_status"] != "FAULT" and device_trust >= 0.2:
+        decision = "REQUEST_DATA"
+        reasons.append(
+            "Manual pothole report recorded as a candidate; additional trusted sensor evidence is required."
+        )
 
     risk_score = round(100 * clamp(0.55 * anomaly_evidence + 0.45 * confidence))
     severity = (

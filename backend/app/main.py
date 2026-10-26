@@ -1,4 +1,5 @@
 import hmac
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -18,6 +19,7 @@ from .schemas import (
     DashboardLogin,
     IngestionResult,
     IssueResult,
+    ManualReportResult,
     SensorReading,
 )
 from .security import (
@@ -29,6 +31,9 @@ from .security import (
     verify_device_signature,
 )
 from .trust_engine import maintenance_priority, score_event, temperature_alert_triggered
+
+logger = logging.getLogger(__name__)
+DEVICE_ACTIVE_WINDOW_SECONDS = 300
 
 app = FastAPI(
     title="UrbanSense Trust-Aware Sensor API",
@@ -46,6 +51,13 @@ app.add_middleware(
 
 def make_point(latitude: float, longitude: float) -> WKTElement:
     return WKTElement(f"POINT({longitude} {latitude})", srid=4326)
+
+
+def is_recent_reading(event: SensorEvent, now: datetime) -> bool:
+    observed_at = event.observed_at
+    if observed_at.tzinfo is None:
+        observed_at = observed_at.replace(tzinfo=timezone.utc)
+    return (now - observed_at).total_seconds() < DEVICE_ACTIVE_WINDOW_SECONDS
 
 
 def to_issue_result(issue: RoadIssue) -> IssueResult:
@@ -246,18 +258,21 @@ def ingest_reading(
         .order_by(SensorEvent.sequence_number.desc())
         .limit(settings.high_temperature_consecutive_readings)
     ).all()
-    is_temperature_alert = temperature_alert_triggered(
-        reading.temperature_c,
-        reading.sequence_number,
-        [
-            {
-                "sequence_number": event.sequence_number,
-                "temperature_c": event.temperature_c,
-            }
-            for event in temperature_history
-        ],
-        settings.high_temperature_threshold_c,
-        settings.high_temperature_consecutive_readings,
+    is_temperature_alert = (
+        (now - observed_at).total_seconds() < DEVICE_ACTIVE_WINDOW_SECONDS
+        and temperature_alert_triggered(
+            reading.temperature_c,
+            reading.sequence_number,
+            [
+                {
+                    "sequence_number": event.sequence_number,
+                    "temperature_c": event.temperature_c,
+                }
+                for event in temperature_history
+            ],
+            settings.high_temperature_threshold_c,
+            settings.high_temperature_consecutive_readings,
+        )
     )
 
     event = SensorEvent(
@@ -393,8 +408,18 @@ def ingest_reading(
         },
     )
     db.commit()
+    logger.info(
+        "Processed sensor reading device_id=%s event_id=%s decision=%s confidence=%d conflict=%s",
+        device_id,
+        reading.event_id,
+        analysis["decision"],
+        round(analysis["confidence"] * 100),
+        analysis["conflict_detected"],
+    )
     return IngestionResult(
         event_id=reading.event_id,
+        temperature_c=reading.temperature_c,
+        humidity_percent=reading.humidity_percent,
         decision=analysis["decision"],
         confidence=round(analysis["confidence"] * 100),
         risk_score=analysis["risk_score"],
@@ -418,6 +443,41 @@ def list_issues(
 ):
     issues = db.scalars(select(RoadIssue).order_by(RoadIssue.last_seen_at.desc())).all()
     return [to_issue_result(issue) for issue in issues]
+
+
+@app.get("/api/manual-reports", response_model=list[ManualReportResult])
+def list_manual_reports(
+    _: str = Depends(require_dashboard_user),
+    db: Session = Depends(get_db),
+):
+    events = db.scalars(
+        select(SensorEvent)
+        .where(SensorEvent.manual_trigger.is_(True))
+        .order_by(SensorEvent.received_at.desc())
+        .limit(100)
+    ).all()
+    statuses = {
+        "ACCEPT": "CONFIRMED",
+        "REQUEST_DATA": "PENDING",
+        "DEFER": "DEFERRED",
+        "REJECT": "REJECTED",
+    }
+    return [
+        ManualReportResult(
+            event_id=event.event_id,
+            vehicle_id=event.vehicle_id,
+            latitude=event.latitude,
+            longitude=event.longitude,
+            timestamp=event.observed_at,
+            received_at=event.received_at,
+            detection_status=statuses[event.decision],
+            decision=event.decision,
+            confidence=round(event.confidence * 100),
+            reasons=event.decision_reasons,
+            event_classification=event.event_classification,
+        )
+        for event in events
+    ]
 
 
 @app.get("/api/maintenance", response_model=list[IssueResult])
@@ -562,17 +622,19 @@ def list_vehicles(
     devices = db.scalars(select(Device).where(Device.is_active.is_(True))).all()
     results = []
     now = utc_now()
+    freshness_cutoff = now - timedelta(seconds=DEVICE_ACTIVE_WINDOW_SECONDS)
     for device in devices:
         latest = db.scalar(
             select(SensorEvent)
             .where(SensorEvent.device_id == device.id)
-            .order_by(SensorEvent.observed_at.desc())
+            .order_by(SensorEvent.observed_at.desc(), SensorEvent.sequence_number.desc())
             .limit(1)
         )
         if not latest:
             results.append(
                 {
                     "id": device.vehicle_id,
+                    "device_id": device.id,
                     "type": "Mobile IoT Unit",
                     "status": "Offline",
                     "zone": "Unassigned",
@@ -590,6 +652,30 @@ def list_vehicles(
                 }
             )
             continue
+        latest_temperature = latest if latest.temperature_c is not None else None
+        if latest_temperature is None and is_recent_reading(latest, now):
+            latest_temperature = db.scalar(
+                select(SensorEvent)
+                .where(
+                    SensorEvent.device_id == device.id,
+                    SensorEvent.temperature_c.is_not(None),
+                    SensorEvent.observed_at >= freshness_cutoff,
+                )
+                .order_by(SensorEvent.observed_at.desc(), SensorEvent.sequence_number.desc())
+                .limit(1)
+            )
+        latest_humidity = latest if latest.humidity_percent is not None else None
+        if latest_humidity is None and is_recent_reading(latest, now):
+            latest_humidity = db.scalar(
+                select(SensorEvent)
+                .where(
+                    SensorEvent.device_id == device.id,
+                    SensorEvent.humidity_percent.is_not(None),
+                    SensorEvent.observed_at >= freshness_cutoff,
+                )
+                .order_by(SensorEvent.observed_at.desc(), SensorEvent.sequence_number.desc())
+                .limit(1)
+            )
         last_observed = latest.observed_at
         if last_observed.tzinfo is None:
             last_observed = last_observed.replace(tzinfo=timezone.utc)
@@ -606,8 +692,13 @@ def list_vehicles(
         results.append(
             {
                 "id": device.vehicle_id,
+                "device_id": device.id,
                 "type": "Mobile IoT Unit",
-                "status": "Active" if (now - last_observed).total_seconds() < 300 else "Offline",
+                "status": (
+                    "Active"
+                    if (now - last_observed).total_seconds() < DEVICE_ACTIVE_WINDOW_SECONDS
+                    else "Offline"
+                ),
                 "zone": f"{latest.latitude:.3f}, {latest.longitude:.3f}",
                 "speed": round(latest.speed_kmh),
                 "sensors": 1,
@@ -618,8 +709,16 @@ def list_vehicles(
                 "observations": count or 0,
                 "anomalies": anomaly_count or 0,
                 "trust": round(device.trust_score * 100),
-                "temperature_c": latest.temperature_c,
-                "humidity_percent": latest.humidity_percent,
+                "temperature_c": (
+                    latest_temperature.temperature_c
+                    if latest_temperature and is_recent_reading(latest_temperature, now)
+                    else None
+                ),
+                "humidity_percent": (
+                    latest_humidity.humidity_percent
+                    if latest_humidity and is_recent_reading(latest_humidity, now)
+                    else None
+                ),
             }
         )
     return results

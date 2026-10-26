@@ -6,13 +6,26 @@ available DHT22 temperature/humidity to the authenticated FastAPI endpoint.
 The sketch waits for a valid, recent GPS fix and HDOP before sending, so it
 does not substitute a made-up accuracy value when GPS accuracy is unavailable.
 
-## Preliminary impact profile
+## Startup motion calibration
 
-The sketch applies the current stationary-sample accelerometer offsets:
-X `-0.00277 g`, Y `+0.01884 g`, and Z `+0.09398 g`. These are preliminary and
-assume a level, Z-up sensor; the Z offset includes the assumed 1 g gravity
-correction. It also applies the preliminary gyro offsets X `-0.98226°/s`,
-Y `+0.22260°/s`, and Z `-0.63648°/s`. The sketch samples at 100 Hz and analyzes
+The sketch uses the Adafruit MPU6050 library to collect 150 accelerometer and
+gyroscope samples at 50 Hz (about three seconds) during startup. Keep the
+sensor stationary, level, and with its Z axis pointing up throughout this
+calibration. The sketch calculates each accelerometer offset from the collected
+mean (subtracting 1 g from the Z-axis mean for gravity) and each gyroscope
+offset from the measured mean angular rate. These measured offsets are applied
+to the top-level acceleration values and every motion sample used by the
+motion-feature pipeline; no preset calibration offsets are used.
+
+Calibration fails if measured acceleration magnitude or angular rate indicates
+movement, or if per-axis sample variation exceeds the stationarity limits.
+On failure, the firmware leaves `calibrated` false, does not start motion
+sampling or submit readings, and reports the cause in Serial Monitor. Hold the
+sensor still and send `r` in Serial Monitor to retry; use 115200 baud. A
+successful calibration prints all six calculated offsets and starts sampling.
+`calibrated` becomes true only after all calibration checks pass.
+
+The sketch then samples motion at 100 Hz and analyzes
 the latest 1-second motion window. A vertical dynamic peak at `0.5 g` while
 moving at least 10 km/h is a candidate trigger; events are separated by at
 least 500 ms. A peak of at least `1.0 g` is reported as high impact in Serial
@@ -20,8 +33,8 @@ Monitor. Bias-corrected acceleration including gravity is sent in the
 top-level API fields for compatibility; the backend-compatible motion summary
 uses EMA gravity removal and filtering.
 
-These values are a prototype threshold profile, not proof of calibration or
-confirmation of a pothole. The firmware keeps `calibrated` false. The feature
+These thresholds are a prototype profile, not proof of calibration or
+confirmation of a pothole. The feature
 pipeline assumes a level, Z-up sensor and does not estimate changing sensor
 orientation. Validate the mounting orientation and collect labeled
 normal-road, pothole, and speed-bump data before relying on these thresholds.
@@ -42,8 +55,12 @@ the fix while a request is in progress.
 4. Set `DEVICE_ID` and `DEVICE_SECRET` to the registered device credentials.
    Keep the secret in local firmware configuration only; never commit it or
    share it in logs or chat.
-5. Keep `calibrated` false until the MPU6050 has actually been calibrated.
-   Configure `HIGH_TEMPERATURE_THRESHOLD_C` and
+5. Before powering the board, place the MPU6050 level with its Z axis up on a
+   stable surface. Keep it still for the three-second startup calibration.
+   Confirm Serial Monitor prints `Calibration SUCCESSFUL` and the six measured
+   offsets before testing motion. If calibration fails, stabilize the sensor
+   and send `r` in Serial Monitor to retry. Configure
+   `HIGH_TEMPERATURE_THRESHOLD_C` and
    `HIGH_TEMPERATURE_CONSECUTIVE_READINGS` in the backend environment as
    needed. Defaults are 40°C and two consecutive valid readings. This is a
    prototype environmental alert threshold, not an official safety limit.
@@ -54,7 +71,9 @@ The button adds `manual_trigger: true` to the next successfully submitted
 reading and uses the most recent valid GPS fix captured at button press. Wire
 the button between GPIO 18 and GND. The backend stores and displays this manual
 signal but does not bypass automated trust scoring or create an issue solely
-because the button was pressed.
+because the button was pressed. If pressed before a valid GPS fix is available,
+the firmware keeps the manual report queued and waits for a fresh GPS fix before
+submitting it.
 
 Automatic threshold crossings are sent as `impact_detected` with
 `impact_peak_g` and the latest recent GPS fix captured at the impact. They are
@@ -71,10 +90,10 @@ classification and confidence alongside the separate trust decision. Run the
 synthetic pipeline examples in [the backend README](../backend/README.md)
 before testing on the vehicle.
 
-`calibrated` intentionally remains false, so the current backend will continue
-to return `REQUEST_DATA` rather than accept a road issue until a real calibration
-process is completed and represented truthfully in the firmware. Do not switch
-it to true merely because the preliminary offsets are present.
+After successful stationary calibration, the firmware reports
+`calibrated: true` with each reading. Calibration does not bypass backend
+trust validation: readings can still return `REQUEST_DATA` when additional
+validation is needed.
 
 ## Hardware pin map
 
@@ -122,13 +141,12 @@ rejects sequence numbers that are not newer than the last recorded reading.
 
 ## Known prototype limitations
 
-- The accelerometer and gyro offsets are preliminary stationary measurements.
-  The feature extraction assumes a level, Z-up mounting and does not use a
-  changing orientation estimate; a tilted or moving mount can distort gravity
-  removal and axis interpretations.
-- The backend accepts an issue only after its trust rules pass. With the
-  current firmware's `calibrated: false`, a pothole-like classification can
-  still return `REQUEST_DATA`.
+- Startup calibration estimates stationary sensor bias only; it is not a
+  multi-orientation calibration. The feature extraction assumes a level,
+  Z-up mounting and does not estimate changing sensor orientation.
+- The backend accepts an issue only after its trust rules pass. A successful
+  firmware calibration is necessary but does not by itself guarantee issue
+  acceptance; readings may still return `REQUEST_DATA`.
 - `gps_accuracy_m` is an HDOP-based estimate, not a measured receiver accuracy.
 - The simulated classification pipeline and configured thresholds have not
   been validated against labeled bus or LMV recordings.

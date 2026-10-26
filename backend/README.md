@@ -138,11 +138,27 @@ procedure has been completed and the firmware accurately represents it.
 - `POST /api/devices`: enroll a device with the admin bootstrap token; returns
   its device secret once.
 - `POST /api/readings`: ingest HMAC-signed, sequenced sensor readings.
+- `GET /api/manual-reports`: list actual manual pothole reports with their
+  backend decision, reasons, coordinates, and validation status; requires
+  dashboard authorization.
 - `GET /api/summary`, `/api/vehicles`, `/api/events`, `/api/alerts`,
   `/api/issues`, `/api/maintenance`: dashboard data; require a bearer token.
 - `GET /api/audit`: audit records; requires dashboard authorization.
 - `GET /health`: process health check only; it does not guarantee database
   connectivity.
+
+Sensor readings preserve nullable temperature and humidity values in the event
+record and ingestion response. `/api/vehicles` returns the latest fresh,
+non-null value for each measurement independently; values older than five
+minutes are returned as `null`. The ESP32's `calibrated` flag is required for
+acceptance and defaults to `false` when omitted.
+
+Manual button reports are stored as sensor events and exposed separately from
+accepted road issues. A report that does not meet normal pothole acceptance
+criteria requests more data instead of creating a confirmed issue; fault,
+stale, conflicting, and low-trust readings retain their backend rejection or
+defer decisions. The firmware keeps a manual report queued until it receives a
+valid GPS fix and a successful ingestion response.
 
 Interactive OpenAPI documentation is available at `/docs` while the API is
 running.

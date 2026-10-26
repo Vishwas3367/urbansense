@@ -1,6 +1,6 @@
 import { MapContainer, TileLayer, CircleMarker, Popup, Polyline } from 'react-leaflet';
 
-export default function MapView({ issues = [], vehicles = [] }) {
+export default function MapView({ issues = [], vehicles = [], manualReports = [] }) {
   return (
     <MapContainer
       center={[12.9716, 79.1594]}
@@ -66,6 +66,46 @@ export default function MapView({ issues = [], vehicles = [] }) {
           </Popup>
         </CircleMarker>
       ))}
+
+      {manualReports.map((report) => {
+        const marker = {
+          CONFIRMED: { color: '#16a34a', radius: 11, dashArray: undefined, fillOpacity: 0.9 },
+          PENDING: { color: '#eab308', radius: 10, dashArray: '4 4', fillOpacity: 0.45 },
+          DEFERRED: { color: '#f97316', radius: 10, dashArray: '4 4', fillOpacity: 0.45 },
+          REJECTED: { color: '#ef4444', radius: 9, dashArray: '2 4', fillOpacity: 0.35 },
+        }[report.detection_status] ?? {
+          color: '#eab308',
+          radius: 10,
+          dashArray: '4 4',
+          fillOpacity: 0.45,
+        };
+        return (
+          <CircleMarker
+            key={`manual-${report.event_id}`}
+            center={[report.latitude, report.longitude]}
+            radius={marker.radius}
+            pathOptions={{
+              color: marker.color,
+              fillColor: marker.color,
+              fillOpacity: marker.fillOpacity,
+              dashArray: marker.dashArray,
+              weight: 3,
+            }}
+          >
+            <Popup>
+              <b>Manual pothole report · {report.detection_status}</b>
+              <br />
+              Vehicle: {report.vehicle_id}
+              <br />
+              GPS: {report.latitude.toFixed(5)}, {report.longitude.toFixed(5)}
+              <br />
+              Decision: {report.decision} · Confidence: {report.confidence}%
+              <br />
+              {report.reasons.join(' ')}
+            </Popup>
+          </CircleMarker>
+        );
+      })}
 
       <Polyline
         positions={vehicles.slice(0, 4).map((v) => [v.lat, v.lng])}

@@ -29,6 +29,8 @@ constexpr unsigned long SEND_INTERVAL_MS = 5000;
 constexpr unsigned long DHT_INTERVAL_MS = 2500;
 constexpr uint32_t MPU_SAMPLE_RATE_HZ = 100;
 constexpr unsigned long MPU_SAMPLE_INTERVAL_MS = 1000 / MPU_SAMPLE_RATE_HZ;
+constexpr uint16_t MPU_CALIBRATION_SAMPLES = 150;
+constexpr unsigned long MPU_CALIBRATION_INTERVAL_MS = 20;
 constexpr size_t MOTION_WINDOW_SAMPLES = 100;
 constexpr unsigned long IMPACT_WINDOW_MS = 1000;
 constexpr unsigned long MIN_EVENT_SEPARATION_MS = 500;
@@ -37,13 +39,16 @@ constexpr float INITIAL_IMPACT_THRESHOLD_G = 0.5f;
 constexpr float HIGH_IMPACT_THRESHOLD_G = 1.0f;
 constexpr float MIN_DETECTION_SPEED_KMH = 10.0f;
 
-// Preliminary offsets assume stationary samples and a level, Z-up mounting.
-constexpr float ACCEL_BIAS_X_G = -0.00277f;
-constexpr float ACCEL_BIAS_Y_G = 0.01884f;
-constexpr float ACCEL_BIAS_Z_G = 0.09398f;
-constexpr float GYRO_BIAS_X_DPS = -0.98226f;
-constexpr float GYRO_BIAS_Y_DPS = 0.22260f;
-constexpr float GYRO_BIAS_Z_DPS = -0.63648f;
+constexpr float CALIBRATION_MAX_ACCEL_MAGNITUDE_DEVIATION_G = 0.15f;
+constexpr float CALIBRATION_MAX_GYRO_MAGNITUDE_DPS = 5.0f;
+constexpr float CALIBRATION_MAX_ACCEL_AXIS_STDDEV_G = 0.04f;
+constexpr float CALIBRATION_MAX_GYRO_AXIS_STDDEV_DPS = 1.5f;
+float accelBiasXG = 0.0f;
+float accelBiasYG = 0.0f;
+float accelBiasZG = 0.0f;
+float gyroBiasXDps = 0.0f;
+float gyroBiasYDps = 0.0f;
+float gyroBiasZDps = 0.0f;
 constexpr float GRAVITY_FILTER_TAU_SECONDS = 0.5f;
 constexpr float MOTION_FILTER_TAU_SECONDS = 0.015f;
 constexpr float VERTICAL_ACTIVITY_THRESHOLD_G = 0.15f;
@@ -91,6 +96,7 @@ unsigned long lastDhtReadTime = 0;
 float temperatureC = NAN;
 float humidityPercent = NAN;
 bool mpuAvailable = false;
+bool mpuSamplingStarted = false;
 bool dhtAvailable = false;
 bool calibrated = false;
 bool manualTriggerPending = false;
@@ -115,6 +121,7 @@ portMUX_TYPE impactMux = portMUX_INITIALIZER_UNLOCKED;
 
 void mpuSamplingTask(void* parameter);
 void gpsParsingTask(void* parameter);
+void handleButton();
 bool captureMotionFeatures(MotionFeatures& features, MotionSample& latestSample);
 void addMotionFeatures(JsonDocument& document, const MotionFeatures& features);
 
@@ -187,10 +194,11 @@ String timestampUtc() {
   return String(buffer);
 }
 
-void initializeMpu() {
+bool initializeMpuSensor() {
   if (!mpu.begin()) {
     Serial.println("MPU6050 not detected.");
-    return;
+    mpuAvailable = false;
+    return false;
   }
 
   mpuAvailable = true;
@@ -198,7 +206,178 @@ void initializeMpu() {
   mpu.setGyroRange(MPU6050_RANGE_500_DEG);
   mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
   Serial.println("MPU6050 initialized.");
-  xTaskCreate(mpuSamplingTask, "mpuSampling", 4096, nullptr, 2, nullptr);
+  return true;
+}
+
+bool calibrateMpu() {
+  calibrated = false;
+  Serial.printf(
+      "Starting stationary MPU6050 calibration: %u samples over approximately 3 seconds.\n",
+      static_cast<unsigned>(MPU_CALIBRATION_SAMPLES));
+  Serial.println("Keep the sensor level, Z axis up, and completely still.");
+  delay(250);
+
+  double accelSum[3] = {0.0, 0.0, 0.0};
+  double accelSquaredSum[3] = {0.0, 0.0, 0.0};
+  double gyroSum[3] = {0.0, 0.0, 0.0};
+  double gyroSquaredSum[3] = {0.0, 0.0, 0.0};
+  const double gravity = static_cast<double>(GRAVITY_M_S2);
+  const double radiansToDegrees = 180.0 / static_cast<double>(PI);
+
+  for (uint16_t sampleIndex = 0;
+       sampleIndex < MPU_CALIBRATION_SAMPLES;
+       ++sampleIndex) {
+    handleButton();
+
+    sensors_event_t acceleration;
+    sensors_event_t gyro;
+    sensors_event_t mpuTemperature;
+    mpu.getEvent(&acceleration, &gyro, &mpuTemperature);
+
+    const double accel[3] = {
+        acceleration.acceleration.x / gravity,
+        acceleration.acceleration.y / gravity,
+        acceleration.acceleration.z / gravity,
+    };
+    const double gyroDps[3] = {
+        gyro.gyro.x * radiansToDegrees,
+        gyro.gyro.y * radiansToDegrees,
+        gyro.gyro.z * radiansToDegrees,
+    };
+    const double accelMagnitude = sqrt(
+        accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2]);
+    const double gyroMagnitude = sqrt(
+        gyroDps[0] * gyroDps[0] +
+        gyroDps[1] * gyroDps[1] +
+        gyroDps[2] * gyroDps[2]);
+
+    bool validSample = true;
+    for (size_t axis = 0; axis < 3; ++axis) {
+      validSample &= isfinite(accel[axis]) && isfinite(gyroDps[axis]);
+    }
+    if (!validSample) {
+      Serial.printf(
+          "Calibration FAILED: invalid sensor sample at sample %u.\n",
+          static_cast<unsigned>(sampleIndex + 1));
+      Serial.println("Check MPU6050 wiring and press 'r' in Serial Monitor to retry.");
+      return false;
+    }
+
+    if (fabs(accelMagnitude - 1.0) >
+            CALIBRATION_MAX_ACCEL_MAGNITUDE_DEVIATION_G ||
+        gyroMagnitude > CALIBRATION_MAX_GYRO_MAGNITUDE_DPS) {
+      calibrated = false;
+      Serial.printf(
+          "Calibration FAILED: movement detected at sample %u (|a|=%.3f g, |gyro|=%.2f dps).\n",
+          static_cast<unsigned>(sampleIndex + 1),
+          static_cast<float>(accelMagnitude),
+          static_cast<float>(gyroMagnitude));
+      Serial.println("Hold the sensor still and press 'r' in Serial Monitor to retry.");
+      return false;
+    }
+
+    for (size_t axis = 0; axis < 3; ++axis) {
+      accelSum[axis] += accel[axis];
+      accelSquaredSum[axis] += accel[axis] * accel[axis];
+      gyroSum[axis] += gyroDps[axis];
+      gyroSquaredSum[axis] += gyroDps[axis] * gyroDps[axis];
+    }
+
+    if ((sampleIndex + 1) % 25 == 0) {
+      Serial.printf(
+          "Calibration progress: %u/%u samples\n",
+          static_cast<unsigned>(sampleIndex + 1),
+          static_cast<unsigned>(MPU_CALIBRATION_SAMPLES));
+    }
+    delay(MPU_CALIBRATION_INTERVAL_MS);
+  }
+
+  const double sampleCount = MPU_CALIBRATION_SAMPLES;
+  for (size_t axis = 0; axis < 3; ++axis) {
+    const double accelMean = accelSum[axis] / sampleCount;
+    const double gyroMean = gyroSum[axis] / sampleCount;
+    const double accelVariance =
+        accelSquaredSum[axis] / sampleCount - accelMean * accelMean;
+    const double gyroVariance =
+        gyroSquaredSum[axis] / sampleCount - gyroMean * gyroMean;
+    const double accelStdDev = sqrt(fmax(0.0, accelVariance));
+    const double gyroStdDev = sqrt(fmax(0.0, gyroVariance));
+
+    if (accelStdDev > CALIBRATION_MAX_ACCEL_AXIS_STDDEV_G ||
+        gyroStdDev > CALIBRATION_MAX_GYRO_AXIS_STDDEV_DPS) {
+      calibrated = false;
+      Serial.printf(
+          "Calibration FAILED: sensor moved during sampling (axis %u accel deviation %.4f g, gyro deviation %.3f dps).\n",
+          static_cast<unsigned>(axis),
+          static_cast<float>(accelStdDev),
+          static_cast<float>(gyroStdDev));
+      Serial.println("Hold the sensor still and press 'r' in Serial Monitor to retry.");
+      return false;
+    }
+  }
+
+  accelBiasXG = static_cast<float>(accelSum[0] / sampleCount);
+  accelBiasYG = static_cast<float>(accelSum[1] / sampleCount);
+  accelBiasZG = static_cast<float>(accelSum[2] / sampleCount - 1.0);
+  gyroBiasXDps = static_cast<float>(gyroSum[0] / sampleCount);
+  gyroBiasYDps = static_cast<float>(gyroSum[1] / sampleCount);
+  gyroBiasZDps = static_cast<float>(gyroSum[2] / sampleCount);
+
+  Serial.println("Calculated accelerometer offsets (g):");
+  Serial.printf(
+      "  X: %.6f, Y: %.6f, Z: %.6f\n",
+      accelBiasXG,
+      accelBiasYG,
+      accelBiasZG);
+  Serial.println("Calculated gyroscope offsets (degrees/second):");
+  Serial.printf(
+      "  X: %.4f, Y: %.4f, Z: %.4f\n",
+      gyroBiasXDps,
+      gyroBiasYDps,
+      gyroBiasZDps);
+
+  calibrated = true;
+  Serial.println("Calibration SUCCESSFUL; calibrated=true.");
+  return true;
+}
+
+void startMpuSampling() {
+  if (!calibrated || mpuSamplingStarted) {
+    return;
+  }
+
+  if (xTaskCreate(
+          mpuSamplingTask, "mpuSampling", 4096, nullptr, 2, nullptr) != pdPASS) {
+    Serial.println(
+        "MPU6050 sampling task could not start; press 'r' to retry calibration and sampling.");
+    return;
+  }
+  mpuSamplingStarted = true;
+  Serial.println("MPU6050 motion sampling started.");
+}
+
+void retryMpuCalibration() {
+  if (mpuSamplingStarted) {
+    Serial.println("Calibration already completed; restart the board to recalibrate.");
+    return;
+  }
+  if (!mpuAvailable && !initializeMpuSensor()) {
+    Serial.println("Calibration unavailable; check MPU6050 wiring and press 'r' to retry.");
+    return;
+  }
+  if (calibrateMpu()) {
+    startMpuSampling();
+  }
+}
+
+void initializeMpu() {
+  if (!initializeMpuSensor()) {
+    Serial.println("Calibration not started; check the MPU6050 and press 'r' to retry.");
+    return;
+  }
+  if (calibrateMpu()) {
+    startMpuSampling();
+  }
 }
 
 void readDht() {
@@ -293,7 +472,10 @@ String calculateHmac(const String& payload) {
 }
 
 String sensorStatus() {
-  return mpuAvailable ? "NORMAL" : "FAULT";
+  if (!mpuAvailable) {
+    return "FAULT";
+  }
+  return calibrated ? "NORMAL" : "DEGRADED";
 }
 
 void mpuSamplingTask(void* parameter) {
@@ -312,18 +494,18 @@ void mpuSamplingTask(void* parameter) {
     const float axRawG = acceleration.acceleration.x / GRAVITY_M_S2;
     const float ayRawG = acceleration.acceleration.y / GRAVITY_M_S2;
     const float azRawG = acceleration.acceleration.z / GRAVITY_M_S2;
-    const float ax = axRawG - ACCEL_BIAS_X_G;
-    const float ay = ayRawG - ACCEL_BIAS_Y_G;
-    const float azCorrected = azRawG - ACCEL_BIAS_Z_G;
+    const float ax = axRawG - accelBiasXG;
+    const float ay = ayRawG - accelBiasYG;
+    const float azCorrected = azRawG - accelBiasZG;
     const float azDynamic = azCorrected - 1.0f;
     const float peakG = fabsf(azDynamic);
     const MotionSample sample = {
         ax,
         ay,
         azCorrected,
-        gyro.gyro.x * 180.0f / PI - GYRO_BIAS_X_DPS,
-        gyro.gyro.y * 180.0f / PI - GYRO_BIAS_Y_DPS,
-        gyro.gyro.z * 180.0f / PI - GYRO_BIAS_Z_DPS,
+        gyro.gyro.x * 180.0f / PI - gyroBiasXDps,
+        gyro.gyro.y * 180.0f / PI - gyroBiasYDps,
+        gyro.gyro.z * 180.0f / PI - gyroBiasZDps,
     };
 
     portENTER_CRITICAL(&motionMux);
@@ -671,6 +853,10 @@ void sendReading() {
     Serial.println("Wi-Fi disconnected; reading not sent.");
     return;
   }
+  if (!calibrated || !mpuSamplingStarted) {
+    Serial.println("MPU6050 calibration incomplete; press 'r' in Serial Monitor to retry.");
+    return;
+  }
   if (!mpuAvailable) {
     Serial.println("MPU6050 unavailable; reading not sent.");
     return;
@@ -791,6 +977,13 @@ void setup() {
 }
 
 void loop() {
+  while (Serial.available() > 0) {
+    const char command = Serial.read();
+    if (command == 'r' || command == 'R') {
+      retryMpuCalibration();
+    }
+  }
+
   readDht();
   handleButton();
 

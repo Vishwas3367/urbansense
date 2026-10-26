@@ -32,6 +32,7 @@ export const api = {
   getSummary: () => request('/api/summary'),
   getVehicles: () => request('/api/vehicles'),
   getIssues: () => request('/api/issues'),
+  getManualReports: () => request('/api/manual-reports'),
   getAlerts: () => request('/api/alerts'),
   getMaintenance: () => request('/api/maintenance'),
   getEvents: () => request('/api/events'),

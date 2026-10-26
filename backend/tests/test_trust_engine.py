@@ -61,6 +61,31 @@ def test_reliable_high_signal_is_accepted():
     assert result["risk_score"] > 0
 
 
+def test_uncalibrated_sensor_requests_more_data():
+    result = evaluate(
+        reading(
+            motion_features=pothole_motion_features(),
+            calibrated=False,
+        )
+    )
+
+    assert result["decision"] == "REQUEST_DATA"
+    assert "calibration is not current" in " ".join(result["reasons"])
+
+
+def test_low_speed_motion_is_not_accepted_as_a_pothole():
+    result = evaluate(
+        reading(
+            speed_kmh=0,
+            motion_features=pothole_motion_features(),
+        )
+    )
+
+    assert result["event_classification"] == "INSUFFICIENT_SPEED"
+    assert result["decision"] == "REQUEST_DATA"
+    assert any("higher-speed sample" in reason for reason in result["reasons"])
+
+
 def test_acceleration_only_high_signal_requests_motion_features():
     result = evaluate()
     assert result["decision"] == "REQUEST_DATA"

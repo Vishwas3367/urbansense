@@ -6,12 +6,37 @@ import api from '../services/api';
 
 export default function Issues() {
   const [issues, setIssues] = useState([]);
+  const [manualReports, setManualReports] = useState([]);
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.getIssues().then(setIssues).catch((requestError) => setError(requestError.message));
+    let isMounted = true;
+    const load = async () => {
+      try {
+        const [nextIssues, nextManualReports] = await Promise.all([
+          api.getIssues(),
+          api.getManualReports(),
+        ]);
+        if (!isMounted) return;
+        setIssues(nextIssues);
+        setManualReports(nextManualReports);
+        setError('');
+      } catch (requestError) {
+        if (isMounted) setError(requestError.message);
+      }
+    };
+    load();
+    const interval = setInterval(load, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
+
+  const pendingManualReports = manualReports.filter(
+    (report) => report.detection_status !== 'CONFIRMED'
+  );
 
   return (
     <Page
@@ -19,6 +44,60 @@ export default function Issues() {
       subtitle="Detected abnormalities verified through distributed mobile sensing."
     >
       {error && <Card className="mb-4 p-4 text-sm text-red-700">{error}</Card>}
+      <Card className="mb-4">
+        <div className="border-b border-white/10 p-5">
+          <h2 className="font-semibold">Manual Pothole Reports</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Field reports awaiting validation, or reports deferred or rejected by backend checks.
+            Refreshes automatically.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead className="text-xs uppercase tracking-wider text-slate-600">
+              <tr>
+                {['Report', 'Vehicle', 'GPS Coordinates', 'Reported At', 'Detection Status', 'Confidence', 'Decision / Reason'].map((header) => (
+                  <th key={header} className="px-5 py-4">{header}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {pendingManualReports.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="px-5 py-8 text-center text-slate-500">
+                    {error ? 'Could not load manual reports.' : 'No pending manual pothole reports.'}
+                  </td>
+                </tr>
+              )}
+              {pendingManualReports.map((report) => (
+                <tr key={report.event_id}>
+                  <td className="px-5 py-4 font-semibold">{report.event_id}</td>
+                  <td className="px-5 py-4">{report.vehicle_id}</td>
+                  <td className="px-5 py-4 text-slate-400">
+                    {report.latitude.toFixed(5)}, {report.longitude.toFixed(5)}
+                  </td>
+                  <td className="px-5 py-4 text-slate-400">
+                    {new Date(report.timestamp).toLocaleString()}
+                  </td>
+                  <td className="px-5 py-4">
+                    <Badge tone={report.detection_status === 'PENDING' ? 'yellow' : report.detection_status === 'REJECTED' ? 'red' : 'gray'}>
+                      {report.detection_status}
+                    </Badge>
+                  </td>
+                  <td className="px-5 py-4">{report.confidence}%</td>
+                  <td className="px-5 py-4">
+                    <div className="font-semibold">{report.decision}</div>
+                    <div className="mt-1 max-w-sm whitespace-normal text-xs text-slate-500">
+                      {report.reasons.join(' ')}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[850px] text-left text-sm">
@@ -57,7 +136,9 @@ export default function Issues() {
                   </td>
                   <td className="px-5 py-4 font-semibold">{issue.confidence}%</td>
                   <td className="px-5 py-4">{issue.detections} observations</td>
-                  <td className="px-5 py-4 text-slate-400">{issue.status}</td>
+                  <td className="px-5 py-4">
+                    <Badge tone="green">Confirmed · {issue.status}</Badge>
+                  </td>
                 </tr>
               ))}
             </tbody>

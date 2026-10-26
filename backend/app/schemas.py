@@ -22,18 +22,18 @@ class DashboardLogin(BaseModel):
 
 
 class MotionFeatures(BaseModel):
-    vertical_peak_g: float = Field(ge=0, le=32)
-    vertical_rms_g: float = Field(ge=0, le=32)
-    dynamic_rms_g: float = Field(ge=0, le=56)
-    acceleration_peak_g: float = Field(ge=0, le=56)
-    jerk_peak_g_s: float = Field(ge=0, le=10_000)
-    gyro_peak_dps: float = Field(ge=0, le=2000)
-    yaw_peak_dps: float = Field(ge=0, le=2000)
+    vertical_peak_g: float = Field(ge=0, le=32, allow_inf_nan=False)
+    vertical_rms_g: float = Field(ge=0, le=32, allow_inf_nan=False)
+    dynamic_rms_g: float = Field(ge=0, le=56, allow_inf_nan=False)
+    acceleration_peak_g: float = Field(ge=0, le=56, allow_inf_nan=False)
+    jerk_peak_g_s: float = Field(ge=0, le=10_000, allow_inf_nan=False)
+    gyro_peak_dps: float = Field(ge=0, le=2000, allow_inf_nan=False)
+    yaw_peak_dps: float = Field(ge=0, le=2000, allow_inf_nan=False)
     impact_duration_ms: int = Field(ge=0, le=10_000)
     vertical_peak_count: int = Field(ge=0, le=1000)
     biphasic: bool
-    longitudinal_peak_g: float = Field(ge=0, le=32)
-    lateral_peak_g: float = Field(ge=0, le=32)
+    longitudinal_peak_g: float = Field(ge=0, le=32, allow_inf_nan=False)
+    lateral_peak_g: float = Field(ge=0, le=32, allow_inf_nan=False)
 
 
 class SensorReading(BaseModel):
@@ -42,28 +42,29 @@ class SensorReading(BaseModel):
     event_id: str = Field(min_length=8, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
     sequence_number: int = Field(gt=0, le=2_147_483_647)
     timestamp: datetime
-    latitude: float = Field(ge=-90, le=90)
-    longitude: float = Field(ge=-180, le=180)
-    ax: float = Field(ge=-32, le=32, description="Longitudinal acceleration in g.")
-    ay: float = Field(ge=-32, le=32, description="Lateral acceleration in g.")
-    az: float = Field(ge=-32, le=32, description="Vertical acceleration in g.")
-    speed_kmh: float = Field(ge=0, le=250, description="Vehicle speed in km/h.")
-    gps_accuracy_m: float = Field(ge=0, le=1000, description="Reported horizontal GPS accuracy in meters.")
-    temperature_c: float | None = Field(default=None, ge=-50, le=100)
-    humidity_percent: float | None = Field(default=None, ge=0, le=100)
-    rainfall_mm: float | None = Field(default=None, ge=0, le=500)
-    jerk: float | None = Field(default=None, ge=0, le=100)
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    ax: float = Field(ge=-32, le=32, allow_inf_nan=False, description="Longitudinal acceleration in g.")
+    ay: float = Field(ge=-32, le=32, allow_inf_nan=False, description="Lateral acceleration in g.")
+    az: float = Field(ge=-32, le=32, allow_inf_nan=False, description="Vertical acceleration in g.")
+    speed_kmh: float = Field(ge=0, le=250, allow_inf_nan=False, description="Vehicle speed in km/h.")
+    gps_accuracy_m: float = Field(ge=0, le=1000, allow_inf_nan=False, description="Reported horizontal GPS accuracy in meters.")
+    temperature_c: float | None = Field(default=None, ge=-40, le=80, allow_inf_nan=False)
+    humidity_percent: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    rainfall_mm: float | None = Field(default=None, ge=0, le=500, allow_inf_nan=False)
+    jerk: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
     manual_trigger: bool = False
     impact_detected: bool = False
     impact_peak_g: float | None = Field(
         default=None,
         ge=0,
         le=32,
+        allow_inf_nan=False,
         description="Peak absolute vertical dynamic acceleration for a potential impact, in g.",
     )
     motion_features: MotionFeatures | None = None
     sensor_status: Literal["NORMAL", "DEGRADED", "FAULT"] = "NORMAL"
-    calibrated: bool = True
+    calibrated: bool = False
 
 
 class IssueResult(BaseModel):
@@ -87,6 +88,8 @@ class IssueResult(BaseModel):
 
 class IngestionResult(BaseModel):
     event_id: str
+    temperature_c: float | None
+    humidity_percent: float | None
     decision: str
     confidence: int
     risk_score: int
@@ -96,3 +99,17 @@ class IngestionResult(BaseModel):
     event_classification: str | None = None
     pothole_confidence: int | None = None
     issue: IssueResult | None = None
+
+
+class ManualReportResult(BaseModel):
+    event_id: str
+    vehicle_id: str
+    latitude: float
+    longitude: float
+    timestamp: datetime
+    received_at: datetime
+    detection_status: Literal["PENDING", "DEFERRED", "REJECTED", "CONFIRMED"]
+    decision: str
+    confidence: int
+    reasons: list[str]
+    event_classification: str | None
